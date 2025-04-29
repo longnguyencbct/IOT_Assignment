@@ -1,11 +1,13 @@
 #define LED_PIN 48
 #define SDA_PIN GPIO_NUM_11
 #define SCL_PIN GPIO_NUM_12
+#define A0_PIN GPIO_NUM_1  // Analog pin for LDR
 
 #include <WiFi.h>
 #include <Arduino_MQTT_Client.h>
 #include <ThingsBoard.h>
 #include "DHT20.h"
+#include "LDR.h"
 #include "Wire.h"
 #include <ArduinoOTA.h>
 #include <freertos/FreeRTOS.h>
@@ -49,6 +51,10 @@ Arduino_MQTT_Client mqttClient(wifiClient);
 ThingsBoard tb(mqttClient, MAX_MESSAGE_SIZE);
 
 DHT20 dht20;
+
+// Initialize LDR sensor
+constexpr unsigned long LDR_RESISTOR = 10000; // Replace with your resistor value in ohms
+LDR ldr(A0_PIN, LDR_RESISTOR, LDR::GL5528, 10, 0); // Use LDR::GL5528 to specify the enum value
 
 RPC_Response setLedSwitchState(const RPC_Data &data) {
     Serial.println("Received Switch state");
@@ -175,6 +181,11 @@ void SensorTask(void *pvParameters) {
       
       float temperature = dht20.getTemperature();
       float humidity = dht20.getHumidity();
+      float lux = ldr.getCurrentLux(); // Get current lux value
+
+      int rawValue = analogRead(A0_PIN);
+      Serial.print("Raw Analog Value: ");
+      Serial.println(rawValue);
 
       if (isnan(temperature) || isnan(humidity)) {
         Serial.println("Failed to read from DHT20 sensor!");
@@ -183,10 +194,18 @@ void SensorTask(void *pvParameters) {
         Serial.print(temperature);
         Serial.print(" °C, Humidity: ");
         Serial.print(humidity);
-        Serial.println(" %");
+        Serial.print(" %");
 
         tb.sendTelemetryData("temperature", temperature);
         tb.sendTelemetryData("humidity", humidity);
+      }
+
+      if (!isnan(lux)) {
+        Serial.print(", Light Intensity: ");
+        Serial.print(lux);
+        Serial.println(" lux\n");
+
+        tb.sendTelemetryData("lux", lux); // Send lux telemetry
       }
 
       tb.sendAttributeData("rssi", WiFi.RSSI());
@@ -207,6 +226,7 @@ void setup() {
 
   Wire.begin(SDA_PIN, SCL_PIN);
   dht20.begin();
+  ldr.setPhotocellPositionOnGround(false); // Set photocell to be on the ground
 
   xTaskCreate(WiFiTask, "WiFi Task", 4096, NULL, 1, NULL);
   xTaskCreate(ThingsBoardTask, "ThingsBoard Task", 8192, NULL, 1, NULL);
