@@ -59,18 +59,18 @@ DHT20 dht20;
 constexpr unsigned long LDR_RESISTOR = 10000; // Replace with your resistor value in ohms
 LDR ldr(A0_PIN, LDR_RESISTOR, LDR::GL5528, 10, 0); // Use LDR::GL5528 to specify the enum value
 
-RPC_Response setLedSwitchState(const RPC_Data &data) {
-    Serial.println("Received Switch state");
+RPC_Response setFanSwitchState(const RPC_Data &data) {
+    Serial.println("Received Fan Switch state");
     bool newState = data;
-    Serial.print("Switch state change: ");
+    Serial.print("Fan state change: ");
     Serial.println(newState);
-    digitalWrite(LED_PIN, newState);
+    digitalWrite(FAN_SIG_PIN, newState ? HIGH : LOW); // Control the fan SIG pin
     attributesChanged = true;
-    return RPC_Response("setLedSwitchValue", newState);
+    return RPC_Response("setFanSwitchValue", newState);
 }
 
 const std::array<RPC_Callback, 1U> callbacks = {
-  RPC_Callback{ "setLedSwitchValue", setLedSwitchState }
+  RPC_Callback{ "setFanSwitchValue", setFanSwitchState }
 };
 
 void processSharedAttributes(const Shared_Attribute_Data &data) {
@@ -233,7 +233,7 @@ void setup() {
   ldr.setPhotocellPositionOnGround(false); // Set photocell to be on the ground
 
   // Start the fan
-  digitalWrite(FAN_SIG_PIN, HIGH); // Send HIGH signal to start the fan
+  // digitalWrite(FAN_SIG_PIN, HIGH); // Send HIGH signal to start the fan
 
   xTaskCreate(WiFiTask, "WiFi Task", 4096, NULL, 1, NULL);
   xTaskCreate(ThingsBoardTask, "ThingsBoard Task", 8192, NULL, 1, NULL);
