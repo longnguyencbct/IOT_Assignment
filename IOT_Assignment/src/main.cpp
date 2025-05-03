@@ -2,6 +2,9 @@
 #define SDA_PIN GPIO_NUM_11
 #define SCL_PIN GPIO_NUM_12
 #define A0_PIN GPIO_NUM_1  // Analog pin for LDR
+#define FAN_SIG_PIN GPIO_NUM_6 // SIG pin for the fan
+#define FAN_NC_PIN GPIO_NUM_7  // NC pin (not connected, can be ignored)
+
 
 #include <WiFi.h>
 #include <Arduino_MQTT_Client.h>
@@ -221,12 +224,16 @@ void SensorTask(void *pvParameters) {
 void setup() {
   Serial.begin(SERIAL_DEBUG_BAUD);
   pinMode(LED_PIN, OUTPUT);
+  pinMode(FAN_SIG_PIN, OUTPUT); // Configure SIG pin as output
   delay(1000);
   InitWiFi();
 
   Wire.begin(SDA_PIN, SCL_PIN);
   dht20.begin();
   ldr.setPhotocellPositionOnGround(false); // Set photocell to be on the ground
+
+  // Start the fan
+  digitalWrite(FAN_SIG_PIN, HIGH); // Send HIGH signal to start the fan
 
   xTaskCreate(WiFiTask, "WiFi Task", 4096, NULL, 1, NULL);
   xTaskCreate(ThingsBoardTask, "ThingsBoard Task", 8192, NULL, 1, NULL);
