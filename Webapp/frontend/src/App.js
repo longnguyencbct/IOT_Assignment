@@ -1,23 +1,29 @@
 import logo from './logo.svg';
-import React from 'react';
+import React, { useState, useEffect } from 'react'; // Add useState and useEffect here
 import './App.css';
 
 function App() {
+  const [telemetryData, setTelemetryData] = useState([]);
+
+  useEffect(() => {
+    const apiUrl ='http://localhost:5000';
+    fetch(`${apiUrl}/api/telemetry`)
+      .then((response) => response.json())
+      .then((data) => setTelemetryData(data))
+      .catch((error) => console.error('Error fetching telemetry data:', error));
+  }, []);
+
   return (
     <div className="App">
       <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.js</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
+        <h1>Telemetry Data</h1>
+        <ul>
+          {telemetryData.map((entry, index) => (
+            <li key={index}>
+              {entry.datetime}: Temp={entry.temperature}°C, Humidity={entry.humidity}%, Lux={entry.lux}
+            </li>
+          ))}
+        </ul>
       </header>
     </div>
   );
