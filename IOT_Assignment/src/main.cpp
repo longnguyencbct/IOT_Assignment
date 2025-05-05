@@ -15,6 +15,12 @@
 #include <ArduinoOTA.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
+#include <TensorFlowLite_ESP32.h>
+#include "tensorflow/lite/micro/all_ops_resolver.h"
+#include "tensorflow/lite/micro/micro_error_reporter.h"
+#include "tensorflow/lite/micro/micro_interpreter.h"
+#include "tensorflow/lite/micro/system_setup.h"
+#include "tensorflow/lite/schema/schema_generated.h"
 
 constexpr char WIFI_SSID[] = ".";//TODO
 constexpr char WIFI_PASSWORD[] = "12345679";//TODO
@@ -48,6 +54,26 @@ constexpr std::array<const char *, 2U> SHARED_ATTRIBUTES_LIST = {
   LED_STATE_ATTR,
   BLINKING_INTERVAL_ATTR
 };
+
+extern unsigned char my_model_tflite[];
+extern unsigned int my_model_tflite_len;
+
+constexpr int kTensorArenaSize = 16 * 1024;
+static uint8_t tensor_arena[kTensorArenaSize];
+
+const int n_steps = 10;           // for example
+const int n_features = 2;         // humidity, temperature
+float humi_seq[n_steps];
+float temp_seq[n_steps];
+int seq_index = 0;
+bool seq_full = false;
+
+namespace {
+  tflite::MicroInterpreter *interpreter;
+  const tflite::Model *model;  
+  TfLiteTensor *input;
+  TfLiteTensor *output;
+}
 
 WiFiClient wifiClient;
 Arduino_MQTT_Client mqttClient(wifiClient);
@@ -186,6 +212,32 @@ void SensorTask(void *pvParameters) {
       float humidity = dht20.getHumidity();
       float lux = ldr.getCurrentLux(); // Get current lux value
 
+      humi_seq[seq_index] = humidity;
+      temp_seq[seq_index] = temperature;
+      seq_index += 1;
+      if(seq_index > n_steps) {
+          seq_index = 0;
+          seq_full = true;
+      }
+      if(seq_full) {
+        for(int i = 0; i < n_steps; ++i) {
+          interpreter->input(0)->data.f[i * 2] = humi_seq[i];
+          interpreter->input(0)->data.f[i * 2 + 1] = temp_seq[i];
+        }
+
+        if(interpreter->Invoke() != kTfLiteOk) {
+          Serial.println("Invoke failed!");
+          return;
+        }
+        float predicted_humidity = interpreter->output(0)->data.f[0];
+        float predicted_temperature = interpreter->output(0)->data.f[1];
+
+        Serial.print("Predicted Humidity: ");
+        Serial.println(predicted_humidity);
+        Serial.print("Predicted Temperature: ");
+        Serial.println(predicted_temperature);
+      }
+
       int rawValue = analogRead(A0_PIN);
       Serial.print("Raw Analog Value: ");
       Serial.println(rawValue);
@@ -234,6 +286,23 @@ void setup() {
 
   // Start the fan
   // digitalWrite(FAN_SIG_PIN, HIGH); // Send HIGH signal to start the fan
+
+  model = tflite::GetModel(my_model_tflite);
+  static tflite::AllOpsResolver resolver;
+
+  static tflite::MicroInterpreter static_interpreter(
+      model, resolver, tensor_arena, kTensorArenaSize, nullptr);
+
+  interpreter = &static_interpreter;
+
+  TfLiteStatus allocate_status = interpreter->AllocateTensors();
+  if(allocate_status != kTfLiteOk) {
+    Serial.println("AllocateTensors() failed");
+    while (1);
+  }
+
+  input = interpreter->input(0);
+  output = interpreter->output(0);
 
   xTaskCreate(WiFiTask, "WiFi Task", 4096, NULL, 1, NULL);
   xTaskCreate(ThingsBoardTask, "ThingsBoard Task", 8192, NULL, 1, NULL);
