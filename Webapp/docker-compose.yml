@@ -22,3 +22,19 @@ services:
       - "3000:3000"
     environment:
       REACT_APP_API_URL: http://localhost:5432
+
+  rest_api:
+    build:
+      context: ./rest_api
+      dockerfile: Dockerfile
+    container_name: iot_rest_api
+    restart: always
+    depends_on:
+      - database
+    ports:
+      - "5000:5000"
+    environment:
+      DB_HOST: database
+      DB_NAME: iot_database
+      DB_USER: admin
+      DB_PASSWORD: admin
