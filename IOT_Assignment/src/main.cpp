@@ -21,6 +21,8 @@
 #include "tensorflow/lite/micro/micro_interpreter.h"
 #include "tensorflow/lite/micro/system_setup.h"
 #include "tensorflow/lite/schema/schema_generated.h"
+// #include <HTTPClient.h>
+#include <ArduinoHttpClient.h>
 
 constexpr char WIFI_SSID[] = ".";//TODO
 constexpr char WIFI_PASSWORD[] = "12345679";//TODO
@@ -202,6 +204,10 @@ void ThingsBoardTask(void *pvParameters) {
 }
 
 void SensorTask(void *pvParameters) {
+  WiFiClient wifiClient;
+  HttpClient http(wifiClient, "192.168.43.117", 5000); // Replace with the actual IP and port of the REST API
+  bool isHttpClientInitialized = false;
+
   while (1) {
     if (millis() - previousDataSend > telemetrySendInterval) {
       previousDataSend = millis();
@@ -253,6 +259,40 @@ void SensorTask(void *pvParameters) {
 
         tb.sendTelemetryData("temperature", temperature);
         tb.sendTelemetryData("humidity", humidity);
+      }
+
+      // Initialize HTTP connection only once
+      if (!isHttpClientInitialized) {
+        Serial.println("Initializing HTTP connection...");
+        isHttpClientInitialized = true;
+      }
+
+      // Send data to the REST API using ArduinoHttpClient
+      http.beginRequest();
+      http.post("/api/telemetry");
+      http.sendHeader("Content-Type", "application/json");
+
+      String payload = "{";
+      payload += "\"datetime\":\"" + String(millis()) + "\",";
+      payload += "\"temperature\":" + String(temperature) + ",";
+      payload += "\"humidity\":" + String(humidity) + ",";
+      payload += "\"lux\":" + String(lux);
+      payload += "}";
+
+      http.sendHeader("Content-Length", payload.length());
+      http.print(payload);
+
+      int httpResponseCode = http.responseStatusCode();
+      String response = http.responseBody();
+
+      if (httpResponseCode > 0) {
+        Serial.print("HTTP Response code: ");
+        Serial.println(httpResponseCode);
+        Serial.print("Response: ");
+        Serial.println(response);
+      } else {
+        Serial.print("Error code: ");
+        Serial.println(httpResponseCode);
       }
 
       if (!isnan(lux)) {
@@ -312,3 +352,4 @@ void setup() {
 void loop() {
   // Empty loop as tasks are managed by FreeRTOS
 }
+ 
